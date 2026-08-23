@@ -33,6 +33,10 @@
 	.global flashWriteMem20
 	.global flashWriteMem20W
 
+#ifdef DSPICO_3DS_BUILD
+	.extern dspicoRomCacheWriteBack
+#endif
+
 	.global flashMemChanged
 
 	.syntax unified
@@ -236,6 +240,14 @@ flashEraseSector:
 	mov r1,#-1
 	strb r1,flashMemChanged
 	bl memset
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r3-r4,r12}		;@ Preserve spxptr and keep the C call aligned.
+	mov r0,#1					;@ Segment 1 contains flash ROM writes.
+	mov r1,#0
+	ldr r2,=0x10000
+	bl dspicoRomCacheWriteBack
+	ldmfd sp!,{r3-r4,r12}
+#endif
 	mov r2,#9					;@ You can chain several Sector Erase commands.
 	b flashCycEnd
 
@@ -266,6 +278,16 @@ flashFastWrite2:
 	ldrb r3,[r2,r0,lsr#12]
 	and r3,r3,r1
 	strb r3,[r2,r0,lsr#12]
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r0-r3,r12}		;@ Outer frame is 12 bytes; add 20 for alignment.
+	mov r1,r0,lsr#12
+	mov r1,r1,lsl#16
+	mov r1,r1,lsr#16
+	mov r0,#1
+	mov r2,#1
+	bl dspicoRomCacheWriteBack
+	ldmfd sp!,{r0-r3,r12}
+#endif
 	mov r2,#6
 	strb r2,flashMemChanged
 	b flashCycEnd
@@ -276,6 +298,16 @@ flashSlowWrite:
 	ldrb r3,[r2,r0,lsr#12]
 	and r3,r3,r1
 	strb r3,[r2,r0,lsr#12]
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r0-r3,r12}
+	mov r1,r0,lsr#12
+	mov r1,r1,lsl#16
+	mov r1,r1,lsr#16
+	mov r0,#1
+	mov r2,#1
+	bl dspicoRomCacheWriteBack
+	ldmfd sp!,{r0-r3,r12}
+#endif
 	mov r1,#1
 	strb r1,flashMemChanged
 	b flashSetRead

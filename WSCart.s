@@ -25,6 +25,11 @@
 	.global reBankSwitchAll
 	.global cartUpdate
 
+#ifdef DSPICO_3DS_BUILD
+	.extern dspicoRomCacheMap
+	.extern dspicoRomCacheUnmap
+#endif
+
 	.syntax unified
 	.arm
 
@@ -90,7 +95,7 @@ wsCartReset:				;@ r0=
 	cmpeq r3,#HW_POCKETCHALLENGEV2
 	ldreq r0,=KarnakR			;@ Some PCV2 games uses Karnak mapper.
 	ldreq r1,=KarnakW
-	adr r3,cartUnmR
+	ldr r3,=cartUnmR
 	bl wsvSetCartMap
 
 	bl eepromReset
@@ -177,6 +182,29 @@ reBankSwitch4_F:			;@ 0x40000-0xFFFFF
 ;@----------------------------------------------------------------------------
 BankSwitch4_F_W:			;@ 0x40000-0xFFFFF
 ;@----------------------------------------------------------------------------
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r4-r9,r12,lr}
+	and r0,r0,#0x3F
+	strb r0,[spxptr,#wsvBnk0SlctX]
+	orr r7,r0,#0x40000000
+
+	ldr r4,romMask
+	ldr r5,romPtr4
+	add r6,v30ptr,#v30MemTblInv-5*4
+	mov r8,#4
+tbLoop2Cached:
+	and r3,r4,r7,ror#28
+	add r0,r5,r3,lsl#16		;@ Adjusted pointer for this 64 KiB segment.
+	mov r1,r8
+	bl cacheBankForSegment
+	sub r5,r5,#0x10000
+	str r0,[r6],#-4
+	add r8,r8,#1
+	adds r7,r7,#0x10000000
+	bcc tbLoop2Cached
+
+	ldmfd sp!,{r4-r9,r12,pc}
+#else
 	stmfd sp!,{lr}
 	and r0,r0,#0x3F
 	strb r0,[spxptr,#wsvBnk0SlctX]
@@ -194,6 +222,7 @@ tbLoop2:
 	bcc tbLoop2
 
 	ldmfd sp!,{pc}
+#endif
 ;@----------------------------------------------------------------------------
 BankSwitch1_H_W:			;@ 0x10000-0x1FFFF
 ;@----------------------------------------------------------------------------
@@ -220,6 +249,12 @@ BankSwitch1_L_W:			;@ 0x10000-0x1FFFF
 	and r3,r1,r0
 	add r3,r2,r3,lsl#16			;@ 64kB blocks.
 	str r3,[v30ptr,#v30MemTblInv-2*4]
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r4-r5,r12,lr}
+	mov r0,#1
+	bl dspicoRomCacheUnmap
+	ldmfd sp!,{r4-r5,r12,lr}
+#endif
 
 	bx lr
 ;@----------------------------------------------------------------------------
@@ -231,6 +266,14 @@ BankSwitch1F_W:				;@ 0x10000-0x1FFFF
 	ldr r2,romPtr1
 	and r3,r1,r0
 	add r3,r2,r3,lsl#16			;@ 64kB blocks.
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r4-r5,r12,lr}
+	mov r0,r3
+	mov r1,#1
+	bl cacheBankForSegment
+	mov r3,r0
+	ldmfd sp!,{r4-r5,r12,lr}
+#endif
 	str r3,[v30ptr,#v30MemTblInv-2*4]
 
 	bx lr
@@ -253,6 +296,14 @@ BankSwitch2_L_W:			;@ 0x20000-0x2FFFF
 	ldr r2,romPtr2
 	and r3,r1,r0
 	add r3,r2,r3,lsl#16			;@ 64kB blocks.
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r4-r5,r12,lr}
+	mov r0,r3
+	mov r1,#2
+	bl cacheBankForSegment
+	mov r3,r0
+	ldmfd sp!,{r4-r5,r12,lr}
+#endif
 	str r3,[v30ptr,#v30MemTblInv-3*4]
 
 	bx lr
@@ -275,9 +326,30 @@ BankSwitch3_L_W:			;@ 0x30000-0x3FFFF
 	ldr r2,romPtr3
 	and r3,r1,r0
 	add r3,r2,r3,lsl#16			;@ 64kB blocks.
+#ifdef DSPICO_3DS_BUILD
+	stmfd sp!,{r4-r5,r12,lr}
+	mov r0,r3
+	mov r1,#3
+	bl cacheBankForSegment
+	mov r3,r0
+	ldmfd sp!,{r4-r5,r12,lr}
+#endif
 	str r3,[v30ptr,#v30MemTblInv-4*4]
 
 	bx lr
+
+#ifdef DSPICO_3DS_BUILD
+;@----------------------------------------------------------------------------
+cacheBankForSegment:		;@ r0=adjusted pointer, r1=segment. Returns adjusted cache pointer.
+;@----------------------------------------------------------------------------
+	mov r2,r1,lsl#16
+	add r0,r0,r2				;@ Convert table pointer to the 64 KiB source start.
+	stmfd sp!,{r2,lr}
+	bl dspicoRomCacheMap
+	ldmfd sp!,{r2,lr}
+	sub r0,r0,r2				;@ Restore the table's full-address adjustment.
+	bx lr
+#endif
 
 ;@----------------------------------------------------------------------------
 BankSwitch4_F_R:			;@ 0xC0/0xCF
